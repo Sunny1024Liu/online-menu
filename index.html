@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>在线菜单管理系统</title>
+    <style>
+        /* CSS 样式 */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+
+        h1, h2 {
+            color: #333;
+        }
+
+        .add-dish-form {
+            margin-bottom: 30px;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input, textarea, button {
+            margin-bottom: 15px;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #218838;
+        }
+
+        .menu-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .dish-card {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            width: calc(33.333% - 20px);
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .dish-card img {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+
+        .dish-card h3 {
+            margin: 10px 0 5px;
+            font-size: 18px;
+        }
+
+        .dish-card p {
+            margin: 5px 0;
+            color: #555;
+        }
+
+        .dish-card .price {
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        .dish-card .code {
+            font-size: 14px;
+            color: #777;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+
+        .menu-actions {
+            margin-bottom: 20px;
+        }
+
+        .menu-actions button {
+            margin-right: 10px;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 600px) {
+            .dish-card {
+                width: 100%; /* 在小屏幕上每行显示 1 个菜品 */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>在线菜单管理系统</h1>
+
+        <!-- 菜单操作 -->
+        <div class="menu-actions">
+            <button onclick="exportMenu()">导出菜单</button>
+            <input type="file" id="importMenuInput" accept=".json" style="display: none;">
+            <button onclick="document.getElementById('importMenuInput').click()">导入菜单</button>
+            <button onclick="generateMenuLink()">生成菜单链接</button>
+            <input type="text" id="menuLink" readonly style="width: 300px; margin-left: 10px;">
+            <button onclick="copyMenuLink()">复制链接</button>
+        </div>
+
+        <!-- 添加菜品表单 -->
+        <div class="add-dish-form">
+            <h2>添加菜品</h2>
+            <form id="addDishForm">
+                <label for="dishName">菜品名称:</label>
+                <input type="text" id="dishName" name="dishName" required>
+
+                <label for="dishDescription">菜品描述:</label>
+                <textarea id="dishDescription" name="dishDescription" rows="3" required></textarea>
+
+                <label for="dishPrice">价格:</label>
+                <input type="number" id="dishPrice" name="dishPrice" step="0.01" required>
+
+                <label for="dishImage">图片链接:</label>
+                <input type="url" id="dishImage" name="dishImage" placeholder="https://example.com/image.jpg">
+
+                <button type="submit">添加菜品</button>
+            </form>
+        </div>
+
+        <!-- 菜单展示 -->
+        <div class="menu">
+            <h2>菜单列表</h2>
+            <div id="menuList" class="menu-list"></div>
+        </div>
+    </div>
+
+    <script>
+        // JavaScript 功能
+        document.addEventListener('DOMContentLoaded', function () {
+            const addDishForm = document.getElementById('addDishForm');
+            const menuList = document.getElementById('menuList');
+
+            let menu = [];
+            let nextCode = 1; // 初始编码
+
+            // 从 localStorage 加载菜单
+            function loadMenu() {
+                const savedMenu = localStorage.getItem('menu');
+                if (savedMenu) {
+                    menu = JSON.parse(savedMenu); // 将字符串转换为数组
+                    if (menu.length > 0) {
+                        // 计算下一个编码
+                        nextCode = Math.max(...menu.map(dish => dish.code)) + 1;
+                    }
+                    renderMenu();
+                }
+            }
+
+            // 保存菜单到 localStorage
+            function saveMenu() {
+                localStorage.setItem('menu', JSON.stringify(menu)); // 将数组转换为字符串
+            }
+
+            // 添加菜品
+            addDishForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+
+                const dishName = document.getElementById('dishName').value;
+                const dishDescription = document.getElementById('dishDescription').value;
+                const dishPrice = parseFloat(document.getElementById('dishPrice').value);
+                const dishImage = document.getElementById('dishImage').value;
+
+                if (dishName && dishDescription && dishPrice) {
+                    const dish = {
+                        code: nextCode++, // 分配唯一编码
+                        name: dishName,
+                        description: dishDescription,
+                        price: dishPrice,
+                        image: dishImage || 'https://via.placeholder.com/150' // 默认图片
+                    };
+
+                    menu.push(dish);
+                    saveMenu(); // 保存菜单
+                    renderMenu();
+                    addDishForm.reset();
+                }
+            });
+
+            // 删除菜品
+            function deleteDish(index) {
+                menu.splice(index, 1); // 从数组中删除菜品
+                saveMenu(); // 更新 localStorage
+                renderMenu(); // 重新渲染菜单
+            }
+
+            // 渲染菜单
+            function renderMenu() {
+                menuList.innerHTML = '';
+                menu.forEach((dish, index) => {
+                    const dishCard = document.createElement('div');
+                    dishCard.className = 'dish-card';
+                    dishCard.innerHTML = `
+                        <div class="code">编码: ${dish.code}</div>
+                        <img src="${dish.image}" alt="${dish.name}">
+                        <h3>${dish.name}</h3>
+                        <p>${dish.description}</p>
+                        <p class="price">￥${dish.price.toFixed(2)}</p>
+                        <button class="delete-btn" onclick="deleteDish(${index})">删除</button>
+                    `;
+                    menuList.appendChild(dishCard);
+                });
+            }
+
+            // 导出菜单为 JSON 文件
+            function exportMenu() {
+                const menuData = JSON.stringify(menu, null, 2); // 将菜单数据转换为 JSON 字符串
+                const blob = new Blob([menuData], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+
+                // 创建下载链接
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'menu.json'; // 下载文件名
+                a.click();
+                URL.revokeObjectURL(url); // 释放 URL 对象
+            }
+
+            // 导入菜单
+            document.getElementById('importMenuInput').addEventListener('change', function (e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function (event) {
+                        const menuData = JSON.parse(event.target.result); // 解析 JSON 文件
+                        menu = menuData; // 更新菜单数据
+                        saveMenu(); // 保存到 localStorage
+                        renderMenu(); // 重新渲染菜单
+                    };
+                    reader.readAsText(file); // 读取文件内容
+                }
+            });
+
+            // 生成菜单链接
+            function generateMenuLink() {
+                if (menu.length === 0) {
+                    alert('菜单为空，请先添加菜品！');
+                    return;
+                }
+
+                const menuData = JSON.stringify(menu); // 将菜单数据转换为字符串
+                const encodedData = encodeURIComponent(menuData); // 编码为 URL 参数
+                const url = `${window.location.origin}${window.location.pathname}?menu=${encodedData}`; // 生成链接
+
+                // 将链接显示在文本框中
+                const menuLinkInput = document.getElementById('menuLink');
+                menuLinkInput.value = url;
+            }
+
+            // 复制链接到剪贴板
+            function copyMenuLink() {
+                const menuLinkInput = document.getElementById('menuLink');
+                if (menuLinkInput.value) {
+                    menuLinkInput.select(); // 选中文本框中的内容
+                    document.execCommand('copy'); // 复制到剪贴板
+                    alert('链接已复制到剪贴板！');
+                } else {
+                    alert('请先生成菜单链接！');
+                }
+            }
+
+            // 页面加载时加载菜单
+            loadMenu();
+
+            // 将函数暴露给全局作用域
+            window.deleteDish = deleteDish;
+            window.generateMenuLink = generateMenuLink;
+            window.copyMenuLink = copyMenuLink;
+        });
+    </script>
+</body>
+</html>
